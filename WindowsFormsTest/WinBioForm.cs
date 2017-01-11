@@ -54,7 +54,6 @@ namespace WindowsFormsTest
             }
 
             Log(string.Format("Using unit id: {0}", _unitId));
-            Log(string.Format("Using database: {0}", _databaseId));
 
             _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.System, WinBioSessionFlag.Default, null, 0);
             //_session = WinBio.OpenSession(WinBioBiometricType.Fingerprint);
