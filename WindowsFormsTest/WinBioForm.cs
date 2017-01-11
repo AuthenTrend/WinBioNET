@@ -3,6 +3,7 @@ using System.Threading;
 using System.Windows.Forms;
 using WinBioNET;
 using WinBioNET.Enums;
+using System.Text;
 
 namespace WindowsFormsTest
 {
@@ -38,12 +39,24 @@ namespace WindowsFormsTest
             var units = WinBio.EnumBiometricUnits(WinBioBiometricType.Fingerprint);
             Log(string.Format("Found {0} units", units.Length));
             if (units.Length == 0) return;
-            var unit = units[0];
-            _unitId = unit.UnitId;
+            for(int i =0;i< units.Length;i++)
+            {
+                Log(string.Format("- Unit id: {0}", units[i].UnitId));
+                Log(string.Format("     Unit id: {0}", units[i].DeviceInstanceId));
+            }
+            _unitId = units[0].UnitId;
+
+            var databases = WinBio.EnumDatabases(WinBioBiometricType.Fingerprint);
+            Console.WriteLine("Found {0} databases", databases.Length);
+            for (var i = 0; i < databases.Length; i++)
+            {
+                Console.WriteLine("DatabaseId {0}: {1}", i, databases[i].DatabaseId);
+            }
+
             Log(string.Format("Using unit id: {0}", _unitId));
-            Log(string.Format("Device instance id: {0}", unit.DeviceInstanceId));
-            Log(string.Format("Using database: {0}", DatabaseId));
-            _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.Private, WinBioSessionFlag.Basic, new[] { _unitId }, DatabaseId);
+            Log(string.Format("Using database: {0}", _databaseId));
+
+            _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.System, WinBioSessionFlag.Default, null, 0);
             //_session = WinBio.OpenSession(WinBioBiometricType.Fingerprint);
             Log("Session opened: " + _session.Value);
         }
@@ -84,7 +97,25 @@ namespace WindowsFormsTest
                     WinBioBiometricSubType subFactor;
                     WinBioRejectDetail rejectDetail;
                     WinBio.Identify(_session, out identity, out subFactor, out rejectDetail);
-                    Log(string.Format("Identity: {0}", identity));
+
+                    StringBuilder name = new StringBuilder();
+                    uint cchName = (uint)name.Capacity;
+                    StringBuilder referencedDomainName = new StringBuilder();
+                    uint cchReferencedDomainName = (uint)referencedDomainName.Capacity;
+                    WinBio.SID_NAME_USE sidUse;
+                    // Sid for BUILTIN\Administrators
+                    byte[] Sid = new byte[identity.AccountSidSize];
+                    identity.AccountSid.GetBinaryForm(Sid, 0);
+                    if (!WinBio.LookupAccountSid(null, Sid, name, ref cchName, referencedDomainName, ref cchReferencedDomainName, out sidUse))
+                    {
+                        Log(string.Format("Identity= {0}", identity));
+                    }
+                    else
+                    {
+                        Log(string.Format("Identity Name = {0}", name));
+                    }
+
+                    Log(string.Format("SubFactor= {0}", subFactor));
                 }
                 catch (WinBioException ex)
                 {

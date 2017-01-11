@@ -85,7 +85,8 @@ namespace WinBioNET
             // find database, throws if not found
             var database = WinBio.EnumDatabases(WinBioBiometricType.Fingerprint).Single(_ => _.DatabaseId == databaseId);
             // delete template file, throws if not authorized
-            File.Delete(database.FilePath);
+            if (File.Exists(database.FilePath))
+                File.Delete(database.FilePath);
             // erase sensor configurations for this database
             foreach (var unitSchema in WinBio.EnumBiometricUnits(WinBioBiometricType.Fingerprint))
             {

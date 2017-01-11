@@ -1,12 +1,36 @@
 using System;
 using System.Runtime.InteropServices;
 using WinBioNET.Enums;
+using System.Text;
 
 namespace WinBioNET
 {
     //[SuppressUnmanagedCodeSecurity]
     public class WinBio
     {
+        public enum SID_NAME_USE
+        {
+            SidTypeUser = 1,
+            SidTypeGroup,
+            SidTypeDomain,
+            SidTypeAlias,
+            SidTypeWellKnownGroup,
+            SidTypeDeletedAccount,
+            SidTypeInvalid,
+            SidTypeUnknown,
+            SidTypeComputer
+        }
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public extern static bool LookupAccountSid(
+          string lpSystemName,
+          [MarshalAs(UnmanagedType.LPArray)] byte[] Sid,
+          StringBuilder lpName,
+          ref uint cchName,
+          StringBuilder ReferencedDomainName,
+          ref uint cchReferencedDomainName,
+          out SID_NAME_USE peUse);
+
         protected const string LibName = "winbio.dll";
 
         [DllImport(LibName, EntryPoint = "WinBioOpenSession")]
