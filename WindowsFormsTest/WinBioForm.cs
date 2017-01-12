@@ -10,9 +10,11 @@ namespace WindowsFormsTest
     public partial class WinBioForm
         : Form
     {
-        private static readonly Guid DatabaseId = Guid.Parse("BC7263C3-A7CE-49F3-8EBF-D47D74863CC6");
+        //private static readonly Guid DatabaseId = Guid.Parse("BC7263C3-A7CE-49F3-8EBF-D47D74863CC6");
         private WinBioSessionHandle _session;
+        private WinBioIdentity _identity;
         private int _unitId;
+        private String _name;
 
         public WinBioForm()
         {
@@ -27,6 +29,18 @@ namespace WindowsFormsTest
                 return;
             }
             richTextBox.AppendText(message + "\n");
+            // scroll it automatically
+            richTextBox.ScrollToCaret();
+        }
+
+        protected void setComboxSelectedIndex(ComboBox cbb, int index)
+        {
+            if (cbb.InvokeRequired)
+            {
+                cbb.Invoke(new Action<ComboBox, int>(setComboxSelectedIndex), cbb, index);
+                return;
+            }
+            cbb.SelectedIndex = index;
         }
 
         protected void Log(WinBioException exception)
@@ -36,28 +50,44 @@ namespace WindowsFormsTest
 
         protected override void OnLoad(EventArgs e)
         {
+            _identity = null;
+            comboUnitId.Items.Clear();
+            comboUnitId.ResetText();
+
             var units = WinBio.EnumBiometricUnits(WinBioBiometricType.Fingerprint);
             Log(string.Format("Found {0} units", units.Length));
             if (units.Length == 0) return;
-            for(int i =0;i< units.Length;i++)
+            for (int i = 0; i < units.Length; i++)
             {
                 Log(string.Format("- Unit id: {0}", units[i].UnitId));
                 Log(string.Format("     Unit id: {0}", units[i].DeviceInstanceId));
+                comboUnitId.Items.Add(units[i].UnitId);
             }
+
             _unitId = units[0].UnitId;
-
-            var databases = WinBio.EnumDatabases(WinBioBiometricType.Fingerprint);
-            Console.WriteLine("Found {0} databases", databases.Length);
-            for (var i = 0; i < databases.Length; i++)
-            {
-                Console.WriteLine("DatabaseId {0}: {1}", i, databases[i].DatabaseId);
-            }
-
+            setComboxSelectedIndex(comboUnitId, 0); // use 1st one by default.
             Log(string.Format("Using unit id: {0}", _unitId));
 
             _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.System, WinBioSessionFlag.Default, null, 0);
             //_session = WinBio.OpenSession(WinBioBiometricType.Fingerprint);
             Log("Session opened: " + _session.Value);
+
+            comboBoxFp.Items.Clear();
+            comboBoxFp.ResetText();
+            String[] myArr = new String[] {
+                "Unknown",//0
+                "RhThumb",
+                "RhIndexFinger",
+                "RhMiddleFinger",
+                "RhRingFinger",
+                "RhLittleFinger",
+                "LhThumb",
+                "LhIndexFinger",
+                "LhMiddleFinger",
+                "LhRingFinger",
+                "LhLittleFinger" }; //10
+            comboBoxFp.Items.AddRange(myArr);
+            setComboxSelectedIndex(comboBoxFp, 1);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -75,8 +105,9 @@ namespace WindowsFormsTest
                 Log("Locating sensor...");
                 try
                 {
-                    var unitId = WinBio.LocateSensor(_session);
-                    Log(string.Format("Sensor located: unit id {0}", unitId));
+                    _unitId = WinBio.LocateSensor(_session);
+                    Log(string.Format("Sensor located: unit id {0}", _unitId));
+                    setComboxSelectedIndex(comboUnitId, comboUnitId.Items.IndexOf(_unitId));
                 }
                 catch (WinBioException ex)
                 {
@@ -92,28 +123,14 @@ namespace WindowsFormsTest
                 Log("Identifying user...");
                 try
                 {
-                    WinBioIdentity identity;
                     WinBioBiometricSubType subFactor;
                     WinBioRejectDetail rejectDetail;
-                    WinBio.Identify(_session, out identity, out subFactor, out rejectDetail);
-
-                    StringBuilder name = new StringBuilder();
-                    uint cchName = (uint)name.Capacity;
-                    StringBuilder referencedDomainName = new StringBuilder();
-                    uint cchReferencedDomainName = (uint)referencedDomainName.Capacity;
-                    WinBio.SID_NAME_USE sidUse;
-                    // Sid for BUILTIN\Administrators
-                    byte[] Sid = new byte[identity.AccountSidSize];
-                    identity.AccountSid.GetBinaryForm(Sid, 0);
-                    if (!WinBio.LookupAccountSid(null, Sid, name, ref cchName, referencedDomainName, ref cchReferencedDomainName, out sidUse))
-                    {
-                        Log(string.Format("Identity= {0}", identity));
-                    }
-                    else
-                    {
-                        Log(string.Format("Identity Name = {0}", name));
-                    }
-
+                    _unitId = WinBio.Identify(_session, out _identity, out subFactor, out rejectDetail);
+                    setComboxSelectedIndex(comboUnitId, comboUnitId.Items.IndexOf(_unitId));
+                    Log(string.Format("Sensor used: unit id {0}", _unitId));
+                    Log(string.Format("Identity = {0}", _identity));
+                    updateCurNameFromIdentity();
+                    Log(string.Format("Identity Name = {0}", _name));
                     Log(string.Format("SubFactor= {0}", subFactor));
                 }
                 catch (WinBioException ex)
@@ -123,18 +140,60 @@ namespace WindowsFormsTest
             });
         }
 
+        private void updateCurNameFromIdentity()
+        {
+            StringBuilder name = new StringBuilder();
+            uint cchName = (uint)name.Capacity;
+            StringBuilder referencedDomainName = new StringBuilder();
+            uint cchReferencedDomainName = (uint)referencedDomainName.Capacity;
+            WinBio.SID_NAME_USE sidUse;
+            // Sid for BUILTIN\Administrators
+            byte[] Sid = new byte[_identity.AccountSidSize];
+            _identity.AccountSid.GetBinaryForm(Sid, 0);
+            if (!WinBio.LookupAccountSid(null, Sid, name, ref cchName, referencedDomainName, ref cchReferencedDomainName, out sidUse))
+                _name = "";
+            else
+                _name = name.ToString();
+        }
+
+
         private void buttonEnroll_Click(object sender, EventArgs e)
         {
+            WinBioBiometricSubType subType = (WinBioBiometricSubType)comboBoxFp.SelectedIndex;
+            if(subType == WinBioBiometricSubType.Unknown)
+            {
+                Log("Please select a finger index, not Unknown.");
+                return;
+            }
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
-                    var identity = AddEnrollment(_session, _unitId, WinBioBiometricSubType.RhIndexFinger);
-                    Log(string.Format("Identity: {0}", identity));
+                    Log("Put your finger on sensor...");
+                    WinBioBiometricSubType subFactor;
+                    WinBioRejectDetail rejectDetail;
+                    while (true)
+                    {
+                        _unitId = WinBio.Identify(_session, out _identity, out subFactor, out rejectDetail);
+                        Log("No. This finger has been enrolled before. Change another one...");
+                    }
+                }
+                catch (WinBioException ex)
+                {
+                    Log("OK. This finger not yet be enrolled before.");
+                }
+
+
+                try
+                {
+                    _identity = AddEnrollment(_session, _unitId, subType);
+                    Log(string.Format("Identity: {0}", _identity));
                 }
                 catch (WinBioException ex)
                 {
                     Log(ex);
+                    if(ex.ErrorCode == WinBioErrorCode.DuplicateEnrollment)
+                        Log(string.Format("Please select another finger index or just delete it for a new one."));
                 }
             });
         }
@@ -142,6 +201,26 @@ namespace WindowsFormsTest
         private void buttonCancel_Click(object sender, EventArgs e)
         {
             WinBio.Cancel(_session);
+        }
+
+        private void buttonDelete_Click(object sender, EventArgs e)
+        {
+            if(_identity == null)
+            {
+                Log(string.Format("Please do Identity first."));
+            }
+            else
+            {
+                try
+                {
+                    WinBio.DeleteTemplate(_session, _unitId, _identity, (WinBioBiometricSubType)comboBoxFp.SelectedIndex);
+                    Log(string.Format("Delete Done."));
+                }
+                catch (WinBioException ex)
+                {
+                    Log(ex);
+                }
+            }
         }
 
         private WinBioIdentity AddEnrollment(WinBioSessionHandle session, int unitId, WinBioBiometricSubType subType)
@@ -165,6 +244,8 @@ namespace WindowsFormsTest
                         Log(string.Format("Enrollment complete with {0} swipes", swipes));
                         break;
                     default:
+                        // Force to discard in-progress Enroll operation.
+                        WinBio.EnrollDiscard(session);
                         throw new WinBioException(code, "WinBioEnrollCapture failed");
                 }
             }
@@ -173,6 +254,11 @@ namespace WindowsFormsTest
             var isNewTemplate = WinBio.EnrollCommit(session, out identity);
             Log(string.Format(isNewTemplate ? "New template committed." : "Template already existing."));
             return identity;
+        }
+
+        private void comboUnitId_SelectionChanged(object sender, EventArgs e)
+        {
+            _unitId = int.Parse(comboUnitId.SelectedItem.ToString());
         }
     }
 }
