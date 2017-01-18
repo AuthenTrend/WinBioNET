@@ -45,6 +45,7 @@
     <Compile Include="Enums\WinBioBirDataFlags.cs" />
     <Compile Include="Enums\WinBioBirPurpose.cs" />
     <Compile Include="Enums\WinBioCapabilitySensor.cs" />
+    <Compile Include="Enums\WinBioComponentType.cs" />
     <Compile Include="Enums\WinBioDatabaseId.cs" />
     <Compile Include="Enums\WinBioDatabaseFlag.cs" />
     <Compile Include="Enums\WinBioErrorCode.cs" />

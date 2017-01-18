@@ -4,6 +4,8 @@ using System.Windows.Forms;
 using WinBioNET;
 using WinBioNET.Enums;
 using System.Text;
+using System.Runtime.InteropServices;
+using System.Linq;
 
 namespace WindowsFormsTest
 {
@@ -60,8 +62,19 @@ namespace WindowsFormsTest
             for (int i = 0; i < units.Length; i++)
             {
                 Log(string.Format("- Unit id: {0}", units[i].UnitId));
-                Log(string.Format("     Unit id: {0}", units[i].DeviceInstanceId));
                 comboUnitId.Items.Add(units[i].UnitId);
+
+                string strDeviceInstanceId = units[i].DeviceInstanceId;
+                Log(string.Format("     Unit id: {0}", strDeviceInstanceId));
+                string strFirmwareVersion = getFirmwareVersion(strDeviceInstanceId);
+                if(strFirmwareVersion.Equals(""))
+                    Log(string.Format("     Firmware: {0}", units[i].FirmwareVersion.ToString()));
+                else
+                    Log(string.Format("     Firmware: {0}", strFirmwareVersion));
+
+                int lastInvSlash = units[i].DeviceInstanceId.LastIndexOf("\\");
+                Log(string.Format("     sn: {0}",
+                    strDeviceInstanceId.Substring(lastInvSlash+1, strDeviceInstanceId.Length - lastInvSlash - 1)));
             }
 
             _unitId = units[0].UnitId;
@@ -69,7 +82,6 @@ namespace WindowsFormsTest
             Log(string.Format("Using unit id: {0}", _unitId));
 
             _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.System, WinBioSessionFlag.Default, null, 0);
-            //_session = WinBio.OpenSession(WinBioBiometricType.Fingerprint);
             Log("Session opened: " + _session.Value);
 
             comboBoxFp.Items.Clear();
@@ -146,11 +158,11 @@ namespace WindowsFormsTest
             uint cchName = (uint)name.Capacity;
             StringBuilder referencedDomainName = new StringBuilder();
             uint cchReferencedDomainName = (uint)referencedDomainName.Capacity;
-            WinBio.SID_NAME_USE sidUse;
+            SetupAPI.SID_NAME_USE sidUse;
             // Sid for BUILTIN\Administrators
             byte[] Sid = new byte[_identity.AccountSidSize];
             _identity.AccountSid.GetBinaryForm(Sid, 0);
-            if (!WinBio.LookupAccountSid(null, Sid, name, ref cchName, referencedDomainName, ref cchReferencedDomainName, out sidUse))
+            if (!SetupAPI.LookupAccountSid(null, Sid, name, ref cchName, referencedDomainName, ref cchReferencedDomainName, out sidUse))
                 _name = "";
             else
                 _name = name.ToString();
@@ -160,7 +172,7 @@ namespace WindowsFormsTest
         private void buttonEnroll_Click(object sender, EventArgs e)
         {
             WinBioBiometricSubType subType = (WinBioBiometricSubType)comboBoxFp.SelectedIndex;
-            if(subType == WinBioBiometricSubType.Unknown)
+            if (subType == WinBioBiometricSubType.Unknown)
             {
                 Log("Please select a finger index, not Unknown.");
                 return;
@@ -192,7 +204,7 @@ namespace WindowsFormsTest
                 catch (WinBioException ex)
                 {
                     Log(ex);
-                    if(ex.ErrorCode == WinBioErrorCode.DuplicateEnrollment)
+                    if (ex.ErrorCode == WinBioErrorCode.DuplicateEnrollment)
                         Log(string.Format("Please select another finger index or just delete it for a new one."));
                 }
             });
@@ -205,7 +217,7 @@ namespace WindowsFormsTest
 
         private void buttonDelete_Click(object sender, EventArgs e)
         {
-            if(_identity == null)
+            if (_identity == null)
             {
                 Log(string.Format("Please do Identity first."));
             }
@@ -259,6 +271,88 @@ namespace WindowsFormsTest
         private void comboUnitId_SelectionChanged(object sender, EventArgs e)
         {
             _unitId = int.Parse(comboUnitId.SelectedItem.ToString());
+        }
+
+        private string getFirmwareVersion(string deviceInstanceId)
+        {
+            var biometricClassGuid = "53D29EF7-377C-4D14-864B-EB3A85769359";
+            Guid FPguid = new Guid(biometricClassGuid);
+            IntPtr h = SetupAPI.SetupDiGetClassDevs(
+                ref FPguid,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                SetupAPI.DiGetClassFlags.DIGCF_PRESENT
+            );
+            if (h == (IntPtr)0)
+                return "";
+            SetupAPI.SP_DEVINFO_DATA dia = new SetupAPI.SP_DEVINFO_DATA();
+            dia.cbSize = Marshal.SizeOf(dia);
+            for (int i = 0; SetupAPI.SetupDiEnumDeviceInfo(h, i, ref dia); ++i)
+            {
+                UInt32 RequiredSize = 0;
+                StringBuilder sb = new StringBuilder(1024);
+                if (!SetupAPI.SetupDiGetDeviceInstanceId(h, ref dia, sb, 1024, out RequiredSize))
+                    continue;
+
+                if(!deviceInstanceId.Equals(sb.ToString()))
+                    continue;
+
+                UInt32 RegType;
+                if (!SetupAPI.SetupDiGetDeviceRegistryProperty(h, ref dia, SetupAPI.RegPropertyType.SPDRP_HARDWAREID, out RegType, sb, 1024, out RequiredSize))
+                    continue;
+
+                int pos = sb.ToString().IndexOf("REV_");
+                if (pos <= 0)
+                    break;
+                pos += "REV_".Length;
+                string s_toReturn = sb.ToString().Substring(pos, 4);
+
+                SetupAPI.SetupDiDestroyDeviceInfoList(h);
+                return s_toReturn;
+            }
+            return "";
+        }
+
+        private void IdentifyTheKeyLED_Click(object sender, EventArgs e)
+        {
+            // Close existed session if any.
+            if (_session.IsValid)
+            {
+                WinBio.CloseSession(_session);
+                _session.Invalidate();
+            }
+            
+            Guid DatabaseId = Guid.Parse("BC7263C3-A7CE-49F3-8EBF-D47D74863CC6");
+            //Guid DatabaseId = Guid.Parse("19feb8c6-fd8d-446f-8de2-ce45b315e27a");
+
+            if (WinBioConfiguration.DatabaseExists(DatabaseId))
+                WinBioConfiguration.RemoveDatabase(DatabaseId);
+            WinBioConfiguration.AddDatabase(DatabaseId, _unitId);
+            WinBioConfiguration.AddUnit(DatabaseId, _unitId);
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                Log(string.Format("Please touch session: unit id {0} in flashing", _unitId));
+                try
+                {
+                    _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.Private, WinBioSessionFlag.Basic, new[] { _unitId }, DatabaseId);
+                    _unitId = WinBio.LocateSensor(_session);
+                    Log(string.Format("Sensor located: unit id {0}", _unitId));
+                    setComboxSelectedIndex(comboUnitId, comboUnitId.Items.IndexOf(_unitId));
+                }
+                catch (WinBioException ex)
+                {
+                    Log(ex);
+                }
+
+                // Close this and reopen a generic one.
+                if (_session.IsValid)
+                {
+                    WinBio.CloseSession(_session);
+                    _session.Invalidate();
+                }
+                _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.System, WinBioSessionFlag.Default, null, 0);
+            });
         }
     }
 }

@@ -1,36 +1,12 @@
 using System;
 using System.Runtime.InteropServices;
 using WinBioNET.Enums;
-using System.Text;
 
 namespace WinBioNET
 {
     //[SuppressUnmanagedCodeSecurity]
     public class WinBio
     {
-        public enum SID_NAME_USE
-        {
-            SidTypeUser = 1,
-            SidTypeGroup,
-            SidTypeDomain,
-            SidTypeAlias,
-            SidTypeWellKnownGroup,
-            SidTypeDeletedAccount,
-            SidTypeInvalid,
-            SidTypeUnknown,
-            SidTypeComputer
-        }
-
-        [DllImport("advapi32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public extern static bool LookupAccountSid(
-          string lpSystemName,
-          [MarshalAs(UnmanagedType.LPArray)] byte[] Sid,
-          StringBuilder lpName,
-          ref uint cchName,
-          StringBuilder ReferencedDomainName,
-          ref uint cchReferencedDomainName,
-          out SID_NAME_USE peUse);
-
         protected const string LibName = "winbio.dll";
 
         [DllImport(LibName, EntryPoint = "WinBioOpenSession")]
@@ -190,6 +166,25 @@ namespace WinBioNET
             identity = new WinBioIdentity(bytes);
             return unitId;
         }
+
+        [DllImport(LibName, EntryPoint = "WinBioControlUnit")]
+        public extern static WinBioErrorCode ControlUnit(
+            WinBioSessionHandle sessionHandle,
+            int unitId,
+            WinBioComponentType componentType,
+            uint controlCode,
+            byte[] sendBuffer,
+            int sendBufferSize,
+            IntPtr receiveBuffer,
+            int receiveBufferSize,
+            ref int receiveDataSize,
+            ref uint statusCode);
+
+        [DllImport("Winbio.dll", EntryPoint = "WinBioUnlockUnit")]
+        public extern static WinBioErrorCode UnlockUnit(WinBioSessionHandle SessionHandle, int UnitId);
+
+        [DllImport("Winbio.dll", EntryPoint = "WinBioLockUnit")]
+        public extern static WinBioErrorCode LockUnit(WinBioSessionHandle SessionHandle, int UnitId);
 
         [DllImport(LibName, EntryPoint = "WinBioEnumEnrollments")]
         private extern static WinBioErrorCode EnumEnrollments(
