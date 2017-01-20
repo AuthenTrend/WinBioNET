@@ -315,44 +315,20 @@ namespace WindowsFormsTest
 
         private void IdentifyTheKeyLED_Click(object sender, EventArgs e)
         {
-            // Close existed session if any.
-            if (_session.IsValid)
+            try
             {
-                WinBio.CloseSession(_session);
-                _session.Invalidate();
-            }
-            
-            Guid DatabaseId = Guid.Parse("BC7263C3-A7CE-49F3-8EBF-D47D74863CC6");
-            //Guid DatabaseId = Guid.Parse("19feb8c6-fd8d-446f-8de2-ce45b315e27a");
-
-            if (WinBioConfiguration.DatabaseExists(DatabaseId))
-                WinBioConfiguration.RemoveDatabase(DatabaseId);
-            WinBioConfiguration.AddDatabase(DatabaseId, _unitId);
-            WinBioConfiguration.AddUnit(DatabaseId, _unitId);
-
-            ThreadPool.QueueUserWorkItem(delegate
-            {
+                WinBioRejectDetail rejectDetail;
                 Log(string.Format("Please touch session: unit id {0} in flashing", _unitId));
-                try
-                {
-                    _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.Private, WinBioSessionFlag.Basic, new[] { _unitId }, DatabaseId);
-                    _unitId = WinBio.LocateSensor(_session);
-                    Log(string.Format("Sensor located: unit id {0}", _unitId));
-                    setComboxSelectedIndex(comboUnitId, comboUnitId.Items.IndexOf(_unitId));
-                }
-                catch (WinBioException ex)
-                {
-                    Log(ex);
-                }
+                WinBio.EnrollBegin(_session, WinBioBiometricSubType.LhThumb, _unitId);
+                WinBio.EnrollCapture(_session, out rejectDetail);
+                WinBio.EnrollDiscard(_session);
+                Log(string.Format("Done"));
+            }
+            catch (WinBioException ex)
+            {
+               //ignore
+            }
 
-                // Close this and reopen a generic one.
-                if (_session.IsValid)
-                {
-                    WinBio.CloseSession(_session);
-                    _session.Invalidate();
-                }
-                _session = WinBio.OpenSession(WinBioBiometricType.Fingerprint, WinBioPoolType.System, WinBioSessionFlag.Default, null, 0);
-            });
         }
     }
 }
