@@ -73,7 +73,7 @@ namespace WindowsFormsTest
                     Log(string.Format("     Firmware: {0}", strFirmwareVersion));
 
                 int lastInvSlash = units[i].DeviceInstanceId.LastIndexOf("\\");
-                Log(string.Format("     sn: {0}",
+                Log(string.Format("     Key code: {0}",
                     strDeviceInstanceId.Substring(lastInvSlash+1, strDeviceInstanceId.Length - lastInvSlash - 1)));
             }
 
@@ -315,20 +315,22 @@ namespace WindowsFormsTest
 
         private void IdentifyTheKeyLED_Click(object sender, EventArgs e)
         {
-            try
+            ThreadPool.QueueUserWorkItem(delegate
             {
-                WinBioRejectDetail rejectDetail;
-                Log(string.Format("Please touch session: unit id {0} in flashing", _unitId));
-                WinBio.EnrollBegin(_session, WinBioBiometricSubType.LhThumb, _unitId);
-                WinBio.EnrollCapture(_session, out rejectDetail);
-                WinBio.EnrollDiscard(_session);
-                Log(string.Format("Done"));
-            }
-            catch (WinBioException ex)
-            {
-               //ignore
-            }
-
+                try
+                {
+                    WinBioRejectDetail rejectDetail;
+                    Log(string.Format("Please touch session: unit id {0} in flashing", _unitId));
+                    WinBio.EnrollBegin(_session, WinBioBiometricSubType.LhThumb, _unitId);
+                    WinBio.EnrollCapture(_session, out rejectDetail);
+                    WinBio.EnrollDiscard(_session);
+                    Log(string.Format("Done"));
+                }
+                catch (WinBioException ex)
+                {
+                    //ignore
+                }
+            });
         }
     }
 }
